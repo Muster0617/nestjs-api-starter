@@ -1,0 +1,32 @@
+/// 用户角色
+enum UserRole {
+  /// 管理员
+  ADMIN
+  /// 普通成员
+  MEMBER
+}
+
+/// 用户账号
+model User {
+  /// 用户 ID
+  id           String   @id @default(uuid())
+  /// 用户名（全局唯一）
+  userName     String   @unique @map("user_name")
+  /// 登录邮箱（全局唯一）
+  email        String   @unique
+  /// 密码哈希（Argon2）
+  passwordHash String   @map("password_hash")
+  /// 用户角色
+  role         UserRole @default(MEMBER)
+  /// 创建时间
+  createdAt    DateTime @default(now()) @map("created_at")
+  /// 更新时间
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  /// 头像地址
+  avatar       String?
+
+  /// 该用户收到的邮件记录
+  emailHistories EmailHistory[]
+
+  @@map("users")
+}

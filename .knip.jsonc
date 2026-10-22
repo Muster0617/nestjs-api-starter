@@ -1,0 +1,12 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": ["src/main.ts", "ecosystem.config.cjs"],
+    "project": ["src/**/*.ts", "prisma/**/*.prisma"],
+    "ignoreBinaries": ["run", "pm2"],
+    "ignoreDependencies": [
+        "pino-roll",
+        "pino-pretty",
+        "@nestjs/schematics"
+    ],
+    "ignoreExportsUsedInFile": true
+}

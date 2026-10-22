@@ -1,0 +1,54 @@
+/// 邮件业务类型
+enum EmailType {
+  /// 注册验证码
+  SIGNUP
+  /// 重置密码验证码
+  PASSWORD_RESET
+}
+
+/// 邮件发送状态
+enum EmailStatus {
+  /// 待发送
+  PENDING
+  /// 失败后等待重试
+  RETRYING
+  /// 已发送
+  SENT
+  /// 最终发送失败
+  FAILED
+}
+
+/// 邮件发送历史
+model EmailHistory {
+  /// 记录 ID
+  id           String      @id @default(uuid())
+  /// 关联用户 ID；未注册邮箱的密码重置可为空
+  userId       String?     @map("user_id")
+  /// 收件人邮箱
+  emailTo      String      @map("email_to")
+  /// 邮件业务类型
+  type         EmailType
+  /// 邮件主题
+  subject      String
+  /// 发送状态
+  status       EmailStatus @default(PENDING)
+  /// SMTP 返回的 messageId
+  messageId    String?     @map("message_id")
+  /// 已尝试发送次数
+  retryCount   Int         @default(0) @map("retry_count")
+  /// 最近一次失败原因
+  errorMessage String?     @map("error_message")
+  /// 创建时间
+  createdAt    DateTime    @default(now()) @map("created_at")
+  /// 发送成功时间
+  sentAt       DateTime?   @map("sent_at")
+
+  /// 关联用户
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([emailTo])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_history")
+}

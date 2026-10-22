@@ -33,6 +33,7 @@ export class DatabaseService
                 `数据库空闲连接异常: ${error.message}`,
                 error.stack
             );
+            console.error('数据库空闲连接异常:', error);
         });
 
         super({ adapter: new PrismaPg(pool, { schema: config.schema }) });

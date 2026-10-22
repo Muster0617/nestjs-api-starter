@@ -1,4 +1,4 @@
-import { Logger, type INestApplication } from '@nestjs/common';
+import { type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
@@ -7,7 +7,6 @@ import { type DocConfig, type IAppConfiguration } from 'src/common/config';
 export default function setupSwagger(app: INestApplication): void {
     const configService =
         app.get<ConfigService<IAppConfiguration, true>>(ConfigService);
-    const logger = new Logger('SwaggerSetup');
     const config = configService.getOrThrow<DocConfig>('doc');
 
     const documentBuild = new DocumentBuilder()
@@ -59,6 +58,4 @@ export default function setupSwagger(app: INestApplication): void {
             filter: true,
         },
     });
-
-    logger.log(`接口文档已就绪于 ${config.path}`);
 }

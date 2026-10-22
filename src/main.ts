@@ -7,7 +7,7 @@ import { type NestExpressApplication } from '@nestjs/platform-express';
 import compression from 'compression';
 import { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
-import { Logger } from 'nestjs-pino';
+import { Logger as NestPinoLogger } from 'nestjs-pino';
 
 import { type AppConfig, type IAppConfiguration } from 'src/common/config';
 
@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
 
     const config =
         app.get<ConfigService<IAppConfiguration, true>>(ConfigService);
-    const logger = app.get(Logger);
+    const logger = app.get(NestPinoLogger);
     const appConfig = config.getOrThrow<AppConfig>('app');
     const host = appConfig.http.host;
     const port = appConfig.http.port;

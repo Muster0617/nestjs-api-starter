@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
@@ -6,6 +6,8 @@ import { type IAppConfiguration, type RedisConfig } from 'src/common/config';
 
 import { REDIS_CLIENT } from './constants/cache.constant';
 import { CacheService } from './services/cache.service';
+
+const logger = new Logger('CacheModule');
 
 @Module({
     providers: [
@@ -19,6 +21,10 @@ import { CacheService } from './services/cache.service';
                 const client = new Redis(config.url);
 
                 client.on('error', error => {
+                    logger.error(
+                        `Redis 客户端异常: ${error.message}`,
+                        error.stack
+                    );
                     console.error('Redis 客户端异常:', error);
                 });
 

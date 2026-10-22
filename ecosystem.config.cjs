@@ -16,7 +16,7 @@ module.exports = {
             kill_timeout: 10000,
             env: {
                 NODE_ENV: 'production',
-                DATABASE_POOL_MAX: String(Math.max(2, Math.floor(180 / cores))),
+                DATABASE_POOL_MAX: String(Math.max(2, Math.floor(197 / cores))),
             },
         },
     ],

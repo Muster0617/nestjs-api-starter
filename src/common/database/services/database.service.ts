@@ -1,4 +1,9 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+    Injectable,
+    Logger,
+    OnModuleDestroy,
+    OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HealthIndicatorResult } from '@nestjs/terminus';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -12,6 +17,7 @@ export class DatabaseService
     extends PrismaClient
     implements OnModuleInit, OnModuleDestroy
 {
+    private readonly logger = new Logger(DatabaseService.name);
     private readonly pool: Pool;
 
     constructor(configService: ConfigService<IAppConfiguration, true>) {
@@ -20,6 +26,13 @@ export class DatabaseService
             connectionString: config.url,
             max: Math.max(1, Number(process.env.DATABASE_POOL_MAX) || 10),
             connectionTimeoutMillis: 5000,
+        });
+
+        pool.on('error', error => {
+            this.logger.error(
+                `数据库空闲连接异常: ${error.message}`,
+                error.stack
+            );
         });
 
         super({ adapter: new PrismaPg(pool, { schema: config.schema }) });

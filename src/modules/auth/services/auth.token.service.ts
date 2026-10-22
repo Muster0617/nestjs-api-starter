@@ -3,8 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { RedisService } from '@nestjs-redisx/core';
 
-import { CacheService } from 'src/common/cache/services/cache.service';
 import { type AuthConfig, type IAppConfiguration } from 'src/common/config';
 import { AUTH_ERROR_MESSAGES } from 'src/common/request/constants/request.constant';
 import {
@@ -28,7 +28,7 @@ export class AuthTokenService {
     private readonly refreshTtlSeconds: number;
 
     constructor(
-        private readonly cacheService: CacheService,
+        private readonly redisService: RedisService,
         private readonly jwtService: JwtService,
         configService: ConfigService<IAppConfiguration, true>
     ) {
@@ -92,13 +92,13 @@ export class AuthTokenService {
             role: payload.role,
         };
 
-        await this.cacheService
-            .getClient()
-            .eval(
-                AUTH_TOKEN_ROTATE_SESSION_LUA,
-                2,
+        await this.redisService.eval(
+            AUTH_TOKEN_ROTATE_SESSION_LUA,
+            [
                 AuthTokenService.userKey(payload.userId),
                 AuthTokenService.sessionKey(payload.userId),
+            ],
+            [
                 AuthTokenService.accessKey(accessHash),
                 JSON.stringify(record),
                 this.accessTtlSeconds,
@@ -106,8 +106,9 @@ export class AuthTokenService {
                 this.refreshTtlSeconds,
                 accessHash,
                 refreshHash,
-                jti
-            );
+                jti,
+            ]
+        );
 
         return tokens;
     }
@@ -117,11 +118,21 @@ export class AuthTokenService {
         token: string
     ): Promise<ITokenRecord | null> {
         const hash = AuthTokenService.hash(token);
-        return this.cacheService.get<ITokenRecord>(
+        const raw = await this.redisService.get(
             kind === 'accessToken'
                 ? AuthTokenService.accessKey(hash)
                 : AuthTokenService.refreshKey(hash)
         );
+
+        if (raw === null) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(raw) as ITokenRecord;
+        } catch {
+            return null;
+        }
     }
 
     async resolveSubject(
@@ -144,21 +155,22 @@ export class AuthTokenService {
     }
 
     async isSessionActive(userId: string, jti: string): Promise<boolean> {
-        const current = await this.cacheService.get<string>(
+        const current = await this.redisService.get(
             AuthTokenService.sessionKey(userId)
         );
+
         return current !== null && current === jti;
     }
 
     async revokeUserTokens(userId: string): Promise<void> {
-        await this.cacheService
-            .getClient()
-            .eval(
-                AUTH_TOKEN_REVOKE_USER_LUA,
-                2,
+        await this.redisService.eval(
+            AUTH_TOKEN_REVOKE_USER_LUA,
+            [
                 AuthTokenService.userKey(userId),
-                AuthTokenService.sessionKey(userId)
-            );
+                AuthTokenService.sessionKey(userId),
+            ],
+            []
+        );
     }
 
     private async signTokens(

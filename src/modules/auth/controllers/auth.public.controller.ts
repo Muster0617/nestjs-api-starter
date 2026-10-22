@@ -7,7 +7,7 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { RateLimit } from '@nestjs-redisx/rate-limit';
 
 import { DocEndpoint } from 'src/common/doc/decorators/doc.endpoint.decorator';
 import { AuthUser } from 'src/common/request/decorators/auth-user.decorator';
@@ -42,7 +42,7 @@ export class AuthPublicController {
 
     @Post('login')
     @HttpCode(HttpStatus.OK)
-    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @RateLimit({ points: 5, duration: 60 })
     @DocEndpoint({
         summary: '用户登录 -「公开」',
         serialization: AuthResponseSchema,
@@ -56,7 +56,7 @@ export class AuthPublicController {
 
     @Post('send-code')
     @HttpCode(HttpStatus.OK)
-    @Throttle({ default: { ttl: 60000, limit: 1 } })
+    @RateLimit({ points: 1, duration: 60 })
     @DocEndpoint({
         summary: '下发邮箱验证码 -「公开」',
         serialization: AuthSendCodeResponseSchema,
@@ -70,7 +70,7 @@ export class AuthPublicController {
 
     @Post('signup')
     @HttpCode(HttpStatus.CREATED)
-    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @RateLimit({ points: 5, duration: 60 })
     @DocEndpoint({
         summary: '用户注册 -「公开」',
         serialization: AuthResponseSchema,
@@ -85,7 +85,7 @@ export class AuthPublicController {
 
     @Post('reset-password')
     @HttpCode(HttpStatus.OK)
-    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @RateLimit({ points: 5, duration: 60 })
     @DocEndpoint({
         summary: '凭邮箱验证码重置密码 -「公开」',
         message: '密码重置成功',
@@ -100,7 +100,7 @@ export class AuthPublicController {
     @HttpCode(HttpStatus.OK)
     @UseGuards(JwtRefreshGuard)
     @ApiBearerAuth('refreshToken')
-    @Throttle({ default: { ttl: 60000, limit: 5 } })
+    @RateLimit({ points: 5, duration: 60 })
     @DocEndpoint({
         summary: '刷新令牌 -「登录用户」',
         serialization: AuthTokenSchema,

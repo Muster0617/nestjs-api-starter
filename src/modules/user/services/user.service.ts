@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Cached, InvalidateTags } from '@nestjs-redisx/cache';
 import { type Prisma } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
@@ -16,9 +17,14 @@ export class UserService {
         private readonly tokenService: AuthTokenService
     ) {}
 
+    @Cached({
+        key: 'user:profile:{0}',
+        tags: ['user:profile:{0}'],
+    })
     async getProfile(userId: string): Promise<UserResponseDto> {
         const user = await this.databaseService.user.findUnique({
             where: { id: userId },
+            omit: { passwordHash: true },
         });
         if (!user) {
             throw new NotFoundException('用户不存在');
@@ -60,6 +66,7 @@ export class UserService {
                 orderBy: { createdAt: 'desc' },
                 skip: (page - 1) * limit,
                 take: limit,
+                omit: { passwordHash: true },
             }),
         ]);
 
@@ -74,6 +81,9 @@ export class UserService {
         };
     }
 
+    @InvalidateTags({
+        tags: ['user:profile:{0}'],
+    })
     async updateUser(
         userId: string,
         data: UserUpdateDto
@@ -84,6 +94,9 @@ export class UserService {
         });
     }
 
+    @InvalidateTags({
+        tags: ['user:profile:{0}'],
+    })
     async deleteUser(userId: string): Promise<void> {
         await this.databaseService.user.delete({
             where: { id: userId },

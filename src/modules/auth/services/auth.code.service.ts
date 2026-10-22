@@ -1,11 +1,16 @@
 import { createHash, randomInt } from 'node:crypto';
 
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+    BadRequestException,
+    HttpException,
+    HttpStatus,
+    Injectable,
+    Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ThrottlerException } from '@nestjs/throttler';
+import { RedisService } from '@nestjs-redisx/core';
 import { type EmailType } from '@prisma/client';
 
-import { CacheService } from 'src/common/cache/services/cache.service';
 import { type EmailConfig, type IAppConfiguration } from 'src/common/config';
 import {
     VERIFICATION_CODE_LENGTH,
@@ -31,7 +36,7 @@ export class AuthCodeService {
     private readonly dailyQuota: number;
 
     constructor(
-        private readonly cacheService: CacheService,
+        private readonly redisService: RedisService,
         configService: ConfigService<IAppConfiguration, true>
     ) {
         const config = configService.getOrThrow<EmailConfig>('email');
@@ -43,15 +48,14 @@ export class AuthCodeService {
     }
 
     async issue(scene: EmailType, email: string): Promise<IIssuedCode> {
-        const existing = await this.cacheService.get<ICodeRecord>(
-            this.codeKey(scene, email)
-        );
+        const existing = await this.getRecord(scene, email);
         if (existing) {
             const waited = Math.floor((Date.now() - existing.sentAt) / 1000);
             const remaining = this.cooldownSeconds - waited;
             if (remaining > 0) {
-                throw new ThrottlerException(
-                    `获取验证码过于频繁，请 ${remaining} 秒后重试`
+                throw new HttpException(
+                    `获取验证码过于频繁，请 ${remaining} 秒后重试`,
+                    HttpStatus.TOO_MANY_REQUESTS
                 );
             }
         }
@@ -64,10 +68,10 @@ export class AuthCodeService {
             attempts: 0,
             sentAt: Date.now(),
         };
-        await this.cacheService.set(
+        await this.redisService.set(
             this.codeKey(scene, email),
-            record,
-            this.ttlSeconds
+            JSON.stringify(record),
+            { ex: this.ttlSeconds }
         );
 
         return { code, ...this.timings() };
@@ -82,15 +86,11 @@ export class AuthCodeService {
 
     async verify(scene: EmailType, email: string, code: string): Promise<void> {
         const result = Number(
-            await this.cacheService
-                .getClient()
-                .eval(
-                    AUTH_CODE_CONSUME_LUA,
-                    1,
-                    this.codeKey(scene, email),
-                    AuthCodeService.hash(code),
-                    this.maxAttempts
-                )
+            await this.redisService.eval(
+                AUTH_CODE_CONSUME_LUA,
+                [this.codeKey(scene, email)],
+                [AuthCodeService.hash(code), this.maxAttempts]
+            )
         );
 
         if (result === 1) return;
@@ -109,23 +109,37 @@ export class AuthCodeService {
         return `${randomInt(max)}`.padStart(VERIFICATION_CODE_LENGTH, '0');
     }
 
+    private async getRecord(
+        scene: EmailType,
+        email: string
+    ): Promise<ICodeRecord | null> {
+        const raw = await this.redisService.get(this.codeKey(scene, email));
+
+        if (raw === null) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(raw) as ICodeRecord;
+        } catch {
+            return null;
+        }
+    }
+
     private async assertDailyQuota(email: string): Promise<void> {
         const key = `${VERIFICATION_KEY_PREFIX}:quota:${email}:${AuthCodeService.dateKey()}`;
         const used = Number(
-            await this.cacheService
-                .getClient()
-                .eval(
-                    AUTH_CODE_QUOTA_INCR_LUA,
-                    1,
-                    key,
-                    AuthCodeService.secondsUntilMidnight(),
-                    this.dailyQuota
-                )
+            await this.redisService.eval(
+                AUTH_CODE_QUOTA_INCR_LUA,
+                [key],
+                [AuthCodeService.secondsUntilMidnight(), this.dailyQuota]
+            )
         );
         if (used < 0) {
             this.logger.warn(`邮箱今日验证码获取次数已达上限: ${email}`);
-            throw new ThrottlerException(
-                '今日获取验证码次数已达上限，请明天再试'
+            throw new HttpException(
+                '今日获取验证码次数已达上限，请明天再试',
+                HttpStatus.TOO_MANY_REQUESTS
             );
         }
     }

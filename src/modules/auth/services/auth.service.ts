@@ -6,6 +6,7 @@ import {
     NotFoundException,
     UnauthorizedException,
 } from '@nestjs/common';
+import { CacheService } from '@nestjs-redisx/cache';
 import { EmailType, UserRole } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -31,7 +32,8 @@ export class AuthService {
         private readonly databaseService: DatabaseService,
         private readonly tokenService: AuthTokenService,
         private readonly codeService: AuthCodeService,
-        private readonly emailQueueService: EmailQueueService
+        private readonly emailQueueService: EmailQueueService,
+        private readonly cacheService: CacheService
     ) {}
 
     async sendVerificationCode(
@@ -127,6 +129,7 @@ export class AuthService {
             where: { id: user.id },
             data: { passwordHash: hashed },
         });
+        await this.cacheService.invalidateTags([`user:profile:${user.id}`]);
         await this.tokenService.revokeUserTokens(user.id);
     }
 

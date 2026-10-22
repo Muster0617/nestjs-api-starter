@@ -25,11 +25,11 @@ export const UserResponseSchema = z.object({
         description: '用户角色',
         examples: [UserRole.MEMBER],
     }),
-    createdAt: z.date().meta({
+    createdAt: z.coerce.date().meta({
         description: '创建时间',
         examples: ['2024-01-01T00:00:00.000Z'],
     }),
-    updatedAt: z.date().meta({
+    updatedAt: z.coerce.date().meta({
         description: '更新时间',
         examples: ['2024-01-02T00:00:00.000Z'],
     }),

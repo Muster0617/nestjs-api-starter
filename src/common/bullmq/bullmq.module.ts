@@ -13,7 +13,7 @@ import { type IAppConfiguration, type RedisConfig } from 'src/common/config';
                 const config = configService.getOrThrow<RedisConfig>('redis');
 
                 return {
-                    connection: { url: config.url },
+                    connection: { url: config.url, db: config.db.queue },
                 };
             },
             inject: [ConfigService],

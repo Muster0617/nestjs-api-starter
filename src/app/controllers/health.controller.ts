@@ -5,8 +5,8 @@ import {
     HealthCheckResult,
     HealthCheckService,
 } from '@nestjs/terminus';
+import { RedisService } from '@nestjs-redisx/core';
 
-import { CacheService } from 'src/common/cache/services/cache.service';
 import { DatabaseService } from 'src/common/database/services/database.service';
 import { DocEndpoint } from 'src/common/doc/decorators/doc.endpoint.decorator';
 import { PublicRoute } from 'src/common/request/decorators/public-route.decorator';
@@ -20,7 +20,7 @@ export class HealthController {
     constructor(
         private readonly healthCheckService: HealthCheckService,
         private readonly databaseService: DatabaseService,
-        private readonly cacheService: CacheService
+        private readonly redisService: RedisService
     ) {}
 
     @Get()
@@ -33,11 +33,15 @@ export class HealthController {
     getHealth(): Promise<HealthCheckResult> {
         return this.healthCheckService.check([
             () => this.databaseService.isHealthy(),
-            () => ({
-                redis: {
-                    status: this.cacheService.isHealthy() ? 'up' : 'down',
-                },
-            }),
+            async () => ({ redis: { status: await this.redisStatus() } }),
         ]);
+    }
+
+    private async redisStatus(): Promise<'up' | 'down'> {
+        try {
+            return (await this.redisService.ping()) === 'PONG' ? 'up' : 'down';
+        } catch {
+            return 'down';
+        }
     }
 }

@@ -58,9 +58,9 @@
 - **统一响应**：成功与失败共用一套信封结构，生产环境只返回安全信息，开发环境附带调试细节
 - **参数校验**：全局 `StandardSchemaValidationPipe` + Zod `strictObject`，多余字段直接拒绝
 - **分布式限流**：`@nestjs-redisx/rate-limit` 插件，Redis 滑动窗口 + Lua 脚本，可按路由覆盖阈值
-- **缓存**：`@nestjs-redisx/cache`，`@Cached` / `@InvalidateTags` 声明式缓存与标签失效
+- **缓存**：`@nestjs-redisx/cache`，注入 `CacheService` 调 `getOrSet` / `invalidateTags` 做显式缓存与标签失效
 - **分布式锁**：`@nestjs-redisx/locks`，注入 `LOCK_SERVICE` 或使用 `@WithLock` 装饰器，`SET NX PX` 加锁、Lua 校验持有者后释放、自动续期与退避重试
-- **Redis 分库**：三个命名客户端共用一个 `REDIS_URL`（不带 db 序号），库号由代码固定分配，业务 / 缓存 / 队列键空间互不干扰
+- **Redis 分库**：两个命名客户端共用一个 `REDIS_URL`（不带 db 序号），库号由代码固定分配，业务 / 缓存键空间互不干扰；队列库由 BullMQ 自行建连
 - **结构化日志**：请求关联 ID、链路 ID、用户 ID 自动注入，敏感字段自动脱敏，生产环境按日滚动且最多保留 7 个日志文件
 - **健康检查**：`/api/health` 同时探测 PostgreSQL 与 Redis
 - **工程化**：ESLint + Prettier（导入排序、未使用导入清理）、TypeScript 类型检查、`pack.mjs` 一键生成生产发布包
@@ -84,7 +84,7 @@
 │   │   └── dtos/              # 健康检查响应 Schema
 │   ├── common/
 │   │   ├── bullmq/            # BullMQ 全局连接（队列库）
-│   │   ├── cache/             # redisx 装配：三客户端 + 缓存 / 限流 / 分布式锁插件
+│   │   ├── cache/             # redisx 装配：双客户端 + 缓存 / 限流 / 分布式锁插件
 │   │   ├── config/            # 分域配置：app / auth / database / doc / email / lock / redis
 │   │   ├── database/          # Prisma Client（PrismaPg 适配器 + pg Pool）
 │   │   ├── doc/               # Zod → Swagger 响应文档装饰器
@@ -187,7 +187,7 @@ npm run dev
 | `AUTH_ACCESS_TOKEN_EXP` | 否 | `15m` | 访问令牌有效期，支持 `s/m/h/d/w` |
 | `AUTH_REFRESH_TOKEN_EXP` | 否 | `7d` | 刷新令牌有效期，支持 `s/m/h/d/w` |
 | `DATABASE_URL` | **是** | — | PostgreSQL 连接串，`?schema=` 会被取出传给 PrismaPg（缺省 `public`） |
-| `REDIS_URL` | **是** | — | Redis 连接串，形如 `redis://:password@host:6379`，**不要带 db 序号**：库号由应用固定分配（业务 0 / 缓存 1 / 队列 2），带了 db 段会被 URL 优先级覆盖，三个客户端会挤到同一个库 |
+| `REDIS_URL` | **是** | — | Redis 连接串，形如 `redis://:password@host:6379`，**不要带 db 序号**：库号由应用固定分配（业务 0 / 缓存 1 / 队列 2），带了 db 段会被 URL 优先级覆盖，redisx 的两个客户端会挤到同一个库 |
 | `SEED_ADMIN_EMAIL` | 种子时必填 | — | 管理员邮箱 |
 | `SEED_ADMIN_PASSWORD` | 种子时必填 | — | 管理员初始密码 |
 | `SEED_ADMIN_USERNAME` | 种子时必填 | — | 管理员用户名 |
@@ -360,17 +360,17 @@ Authorization: Bearer <refreshToken>   # 仅 /api/auth/refresh-token
 
 ## Redis 客户端
 
-`src/common/cache/cache.module.ts` 里的 `RedisModule` 注册了三个命名客户端，共用一个 `REDIS_URL`、按 db 序号隔离，各自独立连接：
+`src/common/cache/cache.module.ts` 里的 `RedisModule` 注册了两个命名客户端，共用一个 `REDIS_URL`、按 db 序号隔离，各自独立连接：
 
 | 客户端 | 用途 | 使用者 | db 序号 |
 | --- | --- | --- | --- |
 | `default` | 业务库 | `RedisService`（`@nestjs-redisx/core`）—— 验证码、令牌会话等业务数据 | 0 |
 | `cache` | 缓存库 | `@nestjs-redisx/cache` 的 L2、限流、分布式锁 | 1 |
-| `queue` | 队列库 | BullMQ（`src/common/bullmq/bullmq.module.ts`） | 2 |
 
-- 客户端名直接写在 `src/common/cache/cache.module.ts`（`default` / `cache` / `queue`），各插件通过自己的 `client` 选项按名字指定
+- 客户端名直接写在 `src/common/cache/cache.module.ts`（`default` / `cache`），各插件通过自己的 `client` 选项按名字指定
+- 队列库（db 2）**不经过 redisx**：BullMQ 在 `src/common/bullmq/bullmq.module.ts` 里自行建连并指定 `connection.db = 2`，因此不需要在 `RedisModule` 中声明 `queue` 客户端
 - 库号固定写在 `src/common/config/redis.config.ts` 的 `db` 常量里，不开放为环境变量，避免各环境库号漂移导致键串库
-- `REDIS_URL` **不要带 db 序号**（写成 `redis://host:6379`）：ioredis 解析 `new Redis(url, options)` 时 URL 优先、只补充缺失字段，带 `/0` 会让 `db` 选项整体失效，三个客户端会全部挤到 db 0
+- `REDIS_URL` **不要带 db 序号**（写成 `redis://host:6379`）：ioredis 解析 `new Redis(url, options)` 时 URL 优先、只补充缺失字段，带 `/0` 会让 `db` 选项整体失效，两个客户端会全部挤到 db 0
 - 限流与分布式锁属于可丢弃的基础设施数据，与缓存同库；业务数据单独放在 `default`，互不影响
 - Redis 客户端**按需建连**：未被使用的客户端不会占用连接
 
@@ -520,7 +520,7 @@ npm run db:seed                        # 创建管理员
    - 入参绑定：`@Body({ schema: XxxSchema })`、`@Query({ schema: XxxSchema })`
 3. **全局守卫**：JWT 访问守卫、角色守卫、限流守卫已在 `RequestModule` 注册为 `APP_GUARD`，默认全站受保护，公开接口需显式标注
 4. **数据库访问**：注入 `DatabaseService`（继承 `PrismaClient`），不要重复建连
-5. **Redis 访问**：业务缓存直接用 `@Cached({ key, tags })` / `@InvalidateTags({ tags })` 装饰器（`@nestjs-redisx/cache`）；需要原子操作或自定义键布局时注入 `RedisService`（`@nestjs-redisx/core`）调 `get` / `set` / `eval`，不要再自己建连。业务数据走 `default` 客户端，缓存 / 限流 / 分布式锁走 `cache` 客户端，队列走 `queue`，不要跨库复用一个客户端
+5. **Redis 访问**：业务缓存注入 `CacheService`（`@nestjs-redisx/cache`），读用 `getOrSet(key, loader, { ttl, tags })`、写后失效用 `invalidateTags([tag])`，键与标签形如 `user:profile:{id}`；需要原子操作或自定义键布局时注入 `RedisService`（`@nestjs-redisx/core`）调 `get` / `set` / `eval`，不要再自己建连。业务数据走 `default` 客户端，缓存 / 限流 / 分布式锁走 `cache` 客户端，不要跨库复用一个客户端
 6. **分布式锁**：临界区注入 `LOCK_SERVICE`（`ILockService`，`@nestjs-redisx/locks`）调 `withLock(key, fn, options?)`，或用 `@WithLock` 装饰器，不要在业务里手写 `SET NX`；默认 TTL 30 秒，长任务务必显式传 `ttl` 或开启自动续期
 7. **导入别名**：统一使用 `src/...` 绝对路径，ESLint 会强制分组排序与首行空行
 8. **代码风格**：4 空格缩进、单引号、语句带分号、行宽 80，统一交给 Prettier（`npm run format`）

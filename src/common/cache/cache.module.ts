@@ -108,11 +108,6 @@ import { RATE_LIMIT_ERROR_MESSAGE } from 'src/common/request/constants/request.c
                             url: config.url,
                             db: config.db.cache,
                         },
-                        queue: {
-                            type: 'single',
-                            url: config.url,
-                            db: config.db.queue,
-                        },
                     },
                     global: { driver: 'ioredis' },
                 };

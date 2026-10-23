@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Cached, InvalidateTags } from '@nestjs-redisx/cache';
+import { CacheService } from '@nestjs-redisx/cache';
 import { type Prisma } from '@prisma/client';
 
 import { DatabaseService } from 'src/common/database/services/database.service';
@@ -14,22 +14,25 @@ import { type UserUpdateDto } from '../dtos/user.update.dto';
 export class UserService {
     constructor(
         private readonly databaseService: DatabaseService,
-        private readonly tokenService: AuthTokenService
+        private readonly tokenService: AuthTokenService,
+        private readonly cacheService: CacheService
     ) {}
 
-    @Cached({
-        key: 'user:profile:{0}',
-        tags: ['user:profile:{0}'],
-    })
     async getProfile(userId: string): Promise<UserResponseDto> {
-        const user = await this.databaseService.user.findUnique({
-            where: { id: userId },
-            omit: { passwordHash: true },
-        });
-        if (!user) {
-            throw new NotFoundException('用户不存在');
-        }
-        return user;
+        return this.cacheService.getOrSet(
+            `user:profile:${userId}`,
+            async () => {
+                const user = await this.databaseService.user.findUnique({
+                    where: { id: userId },
+                    omit: { passwordHash: true },
+                });
+                if (!user) {
+                    throw new NotFoundException('用户不存在');
+                }
+                return user;
+            },
+            { tags: [`user:profile:${userId}`] }
+        );
     }
 
     async listUsers(
@@ -81,26 +84,24 @@ export class UserService {
         };
     }
 
-    @InvalidateTags({
-        tags: ['user:profile:{0}'],
-    })
     async updateUser(
         userId: string,
         data: UserUpdateDto
     ): Promise<UserResponseDto> {
-        return this.databaseService.user.update({
+        const user = await this.databaseService.user.update({
             where: { id: userId },
             data,
         });
+        await this.cacheService.invalidateTags([`user:profile:${userId}`]);
+
+        return user;
     }
 
-    @InvalidateTags({
-        tags: ['user:profile:{0}'],
-    })
     async deleteUser(userId: string): Promise<void> {
         await this.databaseService.user.delete({
             where: { id: userId },
         });
         await this.tokenService.revokeUserTokens(userId);
+        await this.cacheService.invalidateTags([`user:profile:${userId}`]);
     }
 }

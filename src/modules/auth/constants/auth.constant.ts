@@ -1,14 +1,3 @@
-export const PASSWORD_PATTERN =
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-
-export const PASSWORD_PATTERN_MESSAGE =
-    '密码至少 8 位，且需包含大小写字母、数字和特殊字符';
-
-export const PASSWORD_DESCRIPTION =
-    '密码（至少 8 位，须包含大小写字母、数字及特殊字符）';
-
-export const PASSWORD_EXAMPLE = 'Password@123';
-
 export const AUTH_CODE_CONSUME_LUA = `
     local raw = redis.call('GET', KEYS[1])
     if not raw then return 0 end

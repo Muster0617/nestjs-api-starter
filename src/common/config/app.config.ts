@@ -8,7 +8,7 @@ export default registerAs('app', () => {
 
         throttle: {
             ttl: 60000,
-            limit: 100,
+            limit: 1000,
         },
 
         http: {

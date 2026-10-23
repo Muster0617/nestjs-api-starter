@@ -239,12 +239,12 @@ npm run dev
 | `POST` | `/api/auth/signup` | 公开 | 5 次 / 分钟 | 凭验证码注册，成功返回 201 |
 | `POST` | `/api/auth/reset-password` | 公开 | 5 次 / 分钟 | 凭验证码重置密码，成功即吊销该用户全部令牌 |
 | `POST` | `/api/auth/refresh-token` | 刷新令牌 | 5 次 / 分钟 | 用刷新令牌换取新的双令牌（轮换旧会话） |
-| `POST` | `/api/auth/logout` | 登录用户 | 全局 100 次 / 分钟 | 吊销该用户全部令牌 |
-| `GET` | `/api/health` | 公开 | 全局 100 次 / 分钟 | 探测 PostgreSQL 与 Redis |
-| `GET` | `/api/user/profile` | 登录用户 | 全局 100 次 / 分钟 | 获取当前用户资料 |
-| `GET` | `/api/user/list` | `ADMIN` | 全局 100 次 / 分钟 | 分页搜索用户（`page` / `limit` / `keyword` / `role`） |
-| `PUT` | `/api/user/:id` | `ADMIN` | 全局 100 次 / 分钟 | 更新用户（`userName` / `avatar`），`id` 为 UUID v4 |
-| `DELETE` | `/api/user/:id` | `ADMIN` | 全局 100 次 / 分钟 | 删除用户并吊销其令牌 |
+| `POST` | `/api/auth/logout` | 登录用户 | 全局 1000 次 / 分钟 | 吊销该用户全部令牌 |
+| `GET` | `/api/health` | 公开 | 全局 1000 次 / 分钟 | 探测 PostgreSQL 与 Redis |
+| `GET` | `/api/user/profile` | 登录用户 | 全局 1000 次 / 分钟 | 获取当前用户资料 |
+| `GET` | `/api/user/list` | `ADMIN` | 全局 1000 次 / 分钟 | 分页搜索用户（`page` / `limit` / `keyword` / `role`） |
+| `PUT` | `/api/user/:id` | `ADMIN` | 全局 1000 次 / 分钟 | 更新用户（`userName` / `avatar`），`id` 为 UUID v4 |
+| `DELETE` | `/api/user/:id` | `ADMIN` | 全局 1000 次 / 分钟 | 删除用户并吊销其令牌 |
 
 认证方式：
 
@@ -379,7 +379,7 @@ Authorization: Bearer <refreshToken>   # 仅 /api/auth/refresh-token
 ## 限流
 
 - 实现：`@nestjs-redisx/rate-limit` 插件（在 `src/common/cache/cache.module.ts` 中随 `RedisModule` 装配，使用 `cache` 客户端），滑动窗口 + Lua 脚本计数，多实例部署下计数一致
-- 全局默认：**100 次 / 60 秒**，按「控制器 + 方法 + 客户端 IP」分桶（阈值来源 `src/common/config/app.config.ts`）
+- 全局默认：**1000 次 / 60 秒**，按「控制器 + 方法 + 客户端 IP」分桶（阈值来源 `src/common/config/app.config.ts`）
 - 超限返回 `429` 与提示「请求过于频繁，请稍后再试」，响应带 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Reset`，被拒时附 `Retry-After`
 - 单路由覆盖示例：`@RateLimit({ points: 5, duration: 60 })`（见 `src/modules/auth/controllers/auth.public.controller.ts`）
 - 故障策略为 `fail-closed`：Redis 不可用时直接拒绝请求

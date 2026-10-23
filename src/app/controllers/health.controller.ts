@@ -33,15 +33,16 @@ export class HealthController {
     getHealth(): Promise<HealthCheckResult> {
         return this.healthCheckService.check([
             () => this.databaseService.isHealthy(),
-            async () => ({ redis: { status: await this.redisStatus() } }),
+            async () => {
+                try {
+                    const status = await this.redisService.ping();
+                    return {
+                        redis: { status: status === 'PONG' ? 'up' : 'down' },
+                    };
+                } catch {
+                    return { redis: { status: 'down' } };
+                }
+            },
         ]);
-    }
-
-    private async redisStatus(): Promise<'up' | 'down'> {
-        try {
-            return (await this.redisService.ping()) === 'PONG' ? 'up' : 'down';
-        } catch {
-            return 'down';
-        }
     }
 }
